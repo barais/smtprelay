@@ -16,7 +16,7 @@ require (
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/gammazero/deque v1.0.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
-	github.com/maypok86/otter v1.2.3 // indirect
+	github.com/maypok86/otter v1.2.4-0.20241122154217-c7fa1631301b // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
