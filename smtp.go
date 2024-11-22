@@ -18,6 +18,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
@@ -26,7 +27,13 @@ import (
 	"net"
 	"net/smtp"
 	"net/textproto"
+	"os"
 	"strings"
+	"sync"
+	"time"
+
+	"github.com/chrj/smtpd"
+	"github.com/maypok86/otter"
 )
 
 // A Client represents a client connection to an SMTP server.
@@ -320,7 +327,87 @@ var testHookStartTLS func(*tls.Config) // nil, except for tests
 // attachments (see the mime/multipart package), or other mail
 // functionality. Higher-level packages exist outside of the standard
 // library.
+
+var lock = &sync.Mutex{}
+
+type single struct {
+	context context.Context
+	cache   otter.Cache[string, string]
+	r       *Remote
+}
+
+var singleInstance *single
+
+// TODO create a singleton per remote
+func getContext(r *Remote) *single {
+	if singleInstance == nil {
+		lock.Lock()
+		defer lock.Unlock()
+		if singleInstance == nil {
+			singleInstance = &single{}
+
+			singleInstance.context = context.Background()
+			singleInstance.r = r
+
+			cache, err := otter.MustBuilder[string, string](10_000).
+				CollectStats().
+				Cost(func(key string, value string) uint32 {
+					return 1
+				}).DeletionListener(func(key, value string, cause otter.DeletionCause) {
+				log.Infof("Evicted %s %s %v ", key, value, cause)
+
+				parts := strings.Split(value, ";")
+				if len(parts) < 3 {
+					log.Info("Should have had at least three parts")
+				} else {
+					msg, err := os.ReadFile(key + ".mail")
+					if err != nil {
+						log.Errorf("cannot read file %s", key+".mail")
+
+					} else {
+						from := parts[1]
+						to := parts[2:]
+						SendMail(singleInstance.r, from, to, msg)
+						os.Remove(key + ".mail")
+					}
+				}
+			}).
+				WithTTL(time.Minute).
+				Build()
+
+			if err != nil {
+				panic(err)
+			}
+			singleInstance.cache = cache
+		}
+	}
+	return singleInstance
+}
+
 func SendMail(r *Remote, from string, to []string, msg []byte) error {
+	if r.RateLimiter != nil {
+		// Do the background in the main
+		tokens, remaining, _, ok, err := (*r.RateLimiter).Take(getContext(r).context, "")
+		log.Infof("Remaining %v tokens of %v", remaining, tokens)
+
+		if err != nil || !ok {
+			//			return smtpd.Error{Code: 452, Message: "Rate limit reached"}
+			theTime := time.Now()
+			fmt.Println(theTime.Format("2006-1-2-15-4-5"))
+			filename := theTime.Format("2006-1-2-15-4-5") + ";" + from + ";" + strings.Join(to, ";")
+			filenameb64 := base64.URLEncoding.EncodeToString([]byte(filename))
+			fmt.Println(filename)
+			fmt.Println(filenameb64)
+			err := os.WriteFile(filenameb64+".mail", msg, 0644)
+			getContext(r).cache.Set(filenameb64, filename)
+			if err != nil {
+				// handle error
+			}
+			return smtpd.Error{Code: 452, Message: "Rate limit reached"}
+
+		}
+		log.Debugf("Remaining %v tokens of %v", remaining, tokens)
+	}
 	if r.Sender != "" {
 		from = r.Sender
 	}
