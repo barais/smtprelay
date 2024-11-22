@@ -22,4 +22,4 @@ COPY --from=build /app/smtprelay ./
 
 EXPOSE 25
 
-ENTRYPOINT ["./smtprelay"]
+CMD ["./smtprelay", "-config", "smtprelay.ini"]

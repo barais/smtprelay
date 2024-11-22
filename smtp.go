@@ -360,7 +360,7 @@ func getContext(r *Remote) *single {
 				if len(parts) < 3 {
 					log.Info("Should have had at least three parts")
 				} else {
-					msg, err := os.ReadFile(key + ".mail")
+					msg, err := os.ReadFile("/tmp/" + key + ".mail")
 					if err != nil {
 						log.Errorf("cannot read file %s", key+".mail")
 
@@ -368,7 +368,7 @@ func getContext(r *Remote) *single {
 						from := parts[1]
 						to := parts[2:]
 						SendMail(singleInstance.r, from, to, msg)
-						os.Remove(key + ".mail")
+						os.Remove("/tmp/" + key + ".mail")
 					}
 				}
 			}).
@@ -398,7 +398,7 @@ func SendMail(r *Remote, from string, to []string, msg []byte) error {
 			filenameb64 := base64.URLEncoding.EncodeToString([]byte(filename))
 			fmt.Println(filename)
 			fmt.Println(filenameb64)
-			err := os.WriteFile(filenameb64+".mail", msg, 0644)
+			err := os.WriteFile("/tmp/"+filenameb64+".mail", msg, 0644)
 			getContext(r).cache.Set(filenameb64, filename)
 			if err != nil {
 				// handle error
