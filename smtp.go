@@ -336,18 +336,18 @@ type single struct {
 	r       *Remote
 }
 
-var singleInstance *single
+var remoteCache map[*Remote]*single = make(map[*Remote]*single)
 
-// TODO create a singleton per remote
 func getContext(r *Remote) *single {
-	if singleInstance == nil {
+
+	if remoteCache[r] == nil {
 		lock.Lock()
 		defer lock.Unlock()
-		if singleInstance == nil {
-			singleInstance = &single{}
+		if remoteCache[r] == nil {
+			remoteCache[r] = &single{}
 
-			singleInstance.context = context.Background()
-			singleInstance.r = r
+			remoteCache[r].context = context.Background()
+			remoteCache[r].r = r
 
 			cache, err := otter.MustBuilder[string, string](10_000).
 				CollectStats().
@@ -367,7 +367,7 @@ func getContext(r *Remote) *single {
 					} else {
 						from := parts[1]
 						to := parts[2:]
-						SendMail(singleInstance.r, from, to, msg)
+						SendMail(r, from, to, msg)
 						os.Remove("/tmp/" + key + ".mail")
 					}
 				}
@@ -378,10 +378,10 @@ func getContext(r *Remote) *single {
 			if err != nil {
 				panic(err)
 			}
-			singleInstance.cache = cache
+			remoteCache[r].cache = cache
 		}
 	}
-	return singleInstance
+	return remoteCache[r]
 }
 
 func SendMail(r *Remote, from string, to []string, msg []byte) error {
@@ -393,11 +393,8 @@ func SendMail(r *Remote, from string, to []string, msg []byte) error {
 		if err != nil || !ok {
 			//			return smtpd.Error{Code: 452, Message: "Rate limit reached"}
 			theTime := time.Now()
-			fmt.Println(theTime.Format("2006-1-2-15-4-5"))
 			filename := theTime.Format("2006-1-2-15-4-5") + ";" + from + ";" + strings.Join(to, ";")
 			filenameb64 := base64.URLEncoding.EncodeToString([]byte(filename))
-			fmt.Println(filename)
-			fmt.Println(filenameb64)
 			err := os.WriteFile("/tmp/"+filenameb64+".mail", msg, 0644)
 			getContext(r).cache.Set(filenameb64, filename)
 			if err != nil {
